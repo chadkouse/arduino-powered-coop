@@ -17,7 +17,7 @@ const int ON = 1;
 
 //TODO: pull these times from a web server periodically.
 const long OPEN_TIME_SECONDS=(7*60L*60L)+(30*60L); // 7:30am
-const long CLOSE_TIME_SECONDS=(19L*60L*60L)+(10*60L); // 19:10pm
+const long CLOSE_TIME_SECONDS=(20L*60L*60L)+(0*60L); // 20:00pm
 const int TRIGGER_TIME_WINDOW_SEC = 30; // how long to leave power on to the door and lock
 
 // variables will change:
