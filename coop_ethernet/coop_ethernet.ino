@@ -341,7 +341,7 @@ byte decToBcd(byte val){
 
 long getDaySeconds()
 {
-  return fakeTime;
+  //return fakeTime;
   // Reset the register pointer
   Wire.beginTransmission(DS1307_ADDRESS);
 
