@@ -95,15 +95,14 @@ void parsedCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail
   char value[VALUELEN];
   int value_len;
 
-  /* this line sends the standard "we're all OK" headers back to the
-     browser */
-  server.httpSuccess();
-
   /* if we're handling a GET or POST, we can output our data here.
      For a HEAD request, we just stop after outputting headers. */
   if (type == WebServer::HEAD)
-    return;
-
+  {
+      server.httpSuccess();
+      return;
+  }
+/*
   server.printP(Page_start);
   switch (type)
     {
@@ -116,6 +115,7 @@ void parsedCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail
     default:
         server.printP(Unknown_head);
     }
+    */
 
 /*
     server.printP(Parsed_head);
@@ -131,7 +131,9 @@ void parsedCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail
       {
       rc = server.nextURLparam(&url_tail, name, NAMELEN, value, VALUELEN);
       if (rc == URLPARAM_EOS)
-        server.printP(Params_end);
+      {
+        //server.printP(Params_end);
+      }
        else
         {
           String strName = name;
@@ -140,16 +142,37 @@ void parsedCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail
           Serial.println(strVal);
           if (strName == "door_on" && strVal == "1") {
             //open the door
+            server.httpSuccess();
+            server.printP(Get_head);
             server.printP(Opening_door);
             digitalWrite(motorPin, HIGH);
             delay(TRIGGER_TIME_WINDOW_SEC*1000);
           } else if (strName == "on1") {
-            doorSchedule.on1 = atoi(value);
-            //writeRunningConfig();
+            server.httpSuccess();
+            server.printP(Get_head);
+            doorSchedule.on1 = atol(value);
+            writeRunningConfig();
           } else if (strName == "on2") {
-            doorSchedule.on2 = atoi(value);
-            //writeRunningConfig();
+            server.httpSuccess();
+            server.printP(Get_head);
+            doorSchedule.on2 = atol(value);
+            writeRunningConfig();
+          } else if (strName == "getInfo") {
+            server.httpSuccess("application/json");
+            server.print("{\"on1\" : ");
+            server.print(doorSchedule.on1);
+            server.print(", \"on2\" : ");
+            server.print(doorSchedule.on2);
+            server.print(", \"time\" : ");
+            server.print(getDaySeconds());
+            server.print("}");
+            return;
+          } else {
+            server.httpSuccess();
+            server.printP(Get_head);
           }
+          
+          server.printP(Page_end);
           /*
         server.print(name);
         server.printP(Parsed_item_separator);
@@ -206,80 +229,12 @@ void my_failCmd(WebServer &server, WebServer::ConnectionType type, char *url_tai
     server.printP(Page_end);
 
 }
-/*
+
 void writeRunningConfig()
 {
-  if (SD.exists(configFile)) {
-    SD.remove(configFile);
-  }
-  Serial.println("Writing running config");
-  File myFile = SD.open(configFile, FILE_WRITE);
-  if (myFile) {
-    //Serial.print("on1=");
-    myFile.print("on1=");
-  
-    //Serial.print(String(OPEN_TIME_SECONDS));
-    myFile.print(String(OPEN_TIME_SECONDS));
-    //Serial.print("\n");
-    myFile.print("\n");
-    
-    //Serial.print("on2=");
-    myFile.print("on2=");
-    //Serial.print(String(CLOSE_TIME_SECONDS));
-    myFile.print(String(CLOSE_TIME_SECONDS));
-    //Serial.print("\n");
-    myFile.print("\n");
-  }
-  
+  EEPROM_writeAnything(0, doorSchedule);
 }
 
-String getConfigValue(String name)
-{
-  if (!SD.exists(configFile))
-    return "";
-  File myFile = SD.open(configFile);
-  if (myFile)
-  {
-    String key = "";
-    String val = "";
-    boolean foundEqual = false;
-    char character;
-    while(myFile.available()) {
-      character = myFile.read();
-      if (character != '\n') {
-        if (character == '=') {
-          foundEqual = true;
-          continue;
-        }
-        if (foundEqual) {
-          val.concat(character);
-          continue;
-        }
-       
-        key.concat(character);
-      } else {
-        //end of line
-        if (key == name) {
-          return val;
-        }
-      }
-    }
-    //check if the last line matched (with no \n)
-    if (key == name) {
-      return val;
-    }
-  }
-  
-  return "";
-}
-
-long stringToLong(String s)
-{
-    char arr[12];
-    s.toCharArray(arr, sizeof(arr));
-    return atol(arr);
-}
-*/
 void setup() {
   // initialize the LED pin as an output:
   pinMode(motorPin, OUTPUT);
@@ -293,55 +248,12 @@ void setup() {
   }
   
   Serial.println("Reading config from eeprom");
-  Schedule scheduleConfig;
+  Schedule scheduleConfig = {0, 0};
   EEPROM_readAnything(0, scheduleConfig);
-  if (scheduleConfig.on1 > 0 && scheduleCOnfig.on2 > 0)
+  if (scheduleConfig.on1 > 0 && scheduleConfig.on2 > 0)
   {
     doorSchedule = scheduleConfig;
   }
-  
-  /*
-  //Serial.print("Initializing SD card...");
-  // On the Ethernet Shield, CS is pin 4. It's set as an output by default.
-  // Note that even if it's not used as the CS pin, the hardware SS pin 
-  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
-  // or the SD library functions will not work. 
-   pinMode(4, OUTPUT);
-   
-  if (!SD.begin(4)) {
-    Serial.println("initialization failed!");
-    return;
-  }
-  
-  File myFile;
-  Serial.println("initialization done.");
-  if (!SD.exists(configFile))
-  {
-    Serial.println("Creating empty config file");
-    myFile = SD.open(configFile, FILE_WRITE);
-    myFile.close();
-  }
-  
-  Serial.println("Reading config");
-  String val = getConfigValue("on1");
-  long tmpTime = 0L;
-  if (val != "") {
-    tmpTime = stringToLong(val);
-    if (tmpTime > 0) {
-      OPEN_TIME_SECONDS = tmpTime;
-    }
-  }
-  
-  val = getConfigValue("on2");
-  tmpTime = 0L;
-  if (val != "") {
-    tmpTime = stringToLong(val);
-    if (tmpTime > 0) {
-      CLOSE_TIME_SECONDS = tmpTime;
-    }
-  }
-  */
-
 
   // start the Ethernet connection and the server:
   Ethernet.begin(mac, ip);
