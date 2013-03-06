@@ -1,5 +1,12 @@
 <html>
 <head><title>Coop Controller</title>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+<?php
+
+$coop_ip = "hostname:port";
+$show_cam_snapshot = TRUE;
+$snapshot_uri = "http://hostname:port/video.cgi?user=guest&pwd=guest";
+?>
 <script language="javascript">
 function sendAjax(url)
 {
@@ -13,15 +20,22 @@ function sendAjax(url)
     img.onload = remove;
     img.src = url;  
 }
+
+function moveDoor() {
+  sendAjax('<?= sprintf("http://%s/?door_on=1", $coop_ip)?>');
+  alert("Door is activated.");
+  $("#moveDoorBtn").attr("disabled", "disabled");
+
+  setTimeout(function () {
+    $("#moveDoorBtn").removeAttr("disabled");
+  }, 35000);
+
+}
 </script>
 </head>
 <body>
 
 <?php
-
-$coop_ip = "10.0.1.98";
-$show_cam_snapshot = TRUE;
-$snapshot_uri = "http://10.0.1.103/video.cgi?user=guest&pwd=guest";
 
 function curlCall($url)
 {
@@ -131,7 +145,7 @@ New On2 Time <select name="on2_hour"><?= getHourOptions(getHoursFromSeconds($on2
 
 <form method="POST">
 <input type="hidden" name="cmd" value="doorOn">
-<input type="submit" value="Activate the door NOW" />
+<input type="submit" id="moveDoorBtn" onclick="moveDoor();return false;" value="Activate the door NOW" />
 </form>
 
 <?php
@@ -140,10 +154,10 @@ if ($show_cam_snapshot)
 ?>
 <img src="<?= $snapshot_uri; ?>" />
 <br >
-<a href="#" onclick="sendAjax('http://guest:guest@10.0.1.103/decoder_control.cgi?command=95');return false;">IR On</a>&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="#" onclick="sendAjax('http://guest:guest@10.0.1.103/decoder_control.cgi?command=94');return false;">IR Off</a>&nbsp;&nbsp;&nbsp;&nbsp;
-<?php
-
-?>
+<a href="#" onclick="sendAjax('http://guest:guest@hostname:port/decoder_control.cgi?command=95');return false;">IR On</a>&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="#" onclick="sendAjax('http://guest:guest@hostname:port/decoder_control.cgi?command=94');return false;">IR Off</a>&nbsp;&nbsp;&nbsp;&nbsp;
+  <script language="javascript">
+  sendAjax('http://hostname:port/decoder_control.cgi?command=33'); //look at the door.
+  </script>
 </body>
 </html>
