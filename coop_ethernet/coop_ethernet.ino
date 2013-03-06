@@ -1,11 +1,20 @@
 #include <WebServer.h>
-
+#include <EEPROM.h>
+#include "EEPROMAnything.h"
 #include <SPI.h>
 #include <Ethernet.h>
 #include <math.h>
+//#include <SD.h>
 #include "Wire.h"
 #define DS1307_ADDRESS 0x68
 #define VERSION_STRING "0.1"
+
+struct Schedule {
+  long on1;
+  long on2;
+};
+
+Schedule doorSchedule = {(7*60L*60L)+(30*60L), (20*60L*60L)}; //on1 7:30 on2 20:00
 
 byte zero = 0x00; //workaround for issue #527
 
@@ -19,9 +28,6 @@ const int motorPin =  6;      // the number of the LED pin
 const int OFF = 0;
 const int ON = 1;
 
-//TODO: pull these times from a web server periodically.
-long OPEN_TIME_SECONDS=(7*60L*60L)+(30*60L); // 7:30am
-long CLOSE_TIME_SECONDS=(20L*60L*60L)+(0*60L); // 20:00pm
 const int TRIGGER_TIME_WINDOW_SEC = 30; // how long to leave power on to the door and lock
 
 // variables will change:
@@ -32,6 +38,9 @@ int buttonState = LOW;         // variable for reading the pushbutton status
 byte mac[] = { 
   0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress ip(10,0,1,98);
+
+//File root;
+char configFile[ ] = "coop.conf";
 
 #define PREFIX ""
 WebServer webserver(PREFIX, 80);
@@ -69,10 +78,10 @@ void webPrintCurrentTimeInfo(WebServer &server)
   server.print(decodeTimeCode(time));
   server.printP(Line_break);
   server.printP(On_one);
-  server.print(decodeTimeCode(OPEN_TIME_SECONDS));
+  server.print(decodeTimeCode(doorSchedule.on1));
   server.printP(Line_break);
   server.printP(On_two);
-  server.print(decodeTimeCode(CLOSE_TIME_SECONDS));
+  server.print(decodeTimeCode(doorSchedule.on2));
 }
 
 #define NAMELEN 32
@@ -135,9 +144,11 @@ void parsedCmd(WebServer &server, WebServer::ConnectionType type, char *url_tail
             digitalWrite(motorPin, HIGH);
             delay(TRIGGER_TIME_WINDOW_SEC*1000);
           } else if (strName == "on1") {
-            OPEN_TIME_SECONDS = atol(value);
+            doorSchedule.on1 = atoi(value);
+            //writeRunningConfig();
           } else if (strName == "on2") {
-            CLOSE_TIME_SECONDS = atol(value);
+            doorSchedule.on2 = atoi(value);
+            //writeRunningConfig();
           }
           /*
         server.print(name);
@@ -195,7 +206,80 @@ void my_failCmd(WebServer &server, WebServer::ConnectionType type, char *url_tai
     server.printP(Page_end);
 
 }
+/*
+void writeRunningConfig()
+{
+  if (SD.exists(configFile)) {
+    SD.remove(configFile);
+  }
+  Serial.println("Writing running config");
+  File myFile = SD.open(configFile, FILE_WRITE);
+  if (myFile) {
+    //Serial.print("on1=");
+    myFile.print("on1=");
+  
+    //Serial.print(String(OPEN_TIME_SECONDS));
+    myFile.print(String(OPEN_TIME_SECONDS));
+    //Serial.print("\n");
+    myFile.print("\n");
+    
+    //Serial.print("on2=");
+    myFile.print("on2=");
+    //Serial.print(String(CLOSE_TIME_SECONDS));
+    myFile.print(String(CLOSE_TIME_SECONDS));
+    //Serial.print("\n");
+    myFile.print("\n");
+  }
+  
+}
 
+String getConfigValue(String name)
+{
+  if (!SD.exists(configFile))
+    return "";
+  File myFile = SD.open(configFile);
+  if (myFile)
+  {
+    String key = "";
+    String val = "";
+    boolean foundEqual = false;
+    char character;
+    while(myFile.available()) {
+      character = myFile.read();
+      if (character != '\n') {
+        if (character == '=') {
+          foundEqual = true;
+          continue;
+        }
+        if (foundEqual) {
+          val.concat(character);
+          continue;
+        }
+       
+        key.concat(character);
+      } else {
+        //end of line
+        if (key == name) {
+          return val;
+        }
+      }
+    }
+    //check if the last line matched (with no \n)
+    if (key == name) {
+      return val;
+    }
+  }
+  
+  return "";
+}
+
+long stringToLong(String s)
+{
+    char arr[12];
+    s.toCharArray(arr, sizeof(arr));
+    return atol(arr);
+}
+*/
 void setup() {
   // initialize the LED pin as an output:
   pinMode(motorPin, OUTPUT);
@@ -207,6 +291,56 @@ void setup() {
   while (!Serial) {
     ; // wait for serial port to connect. Needed for Leonardo only
   }
+  
+  Serial.println("Reading config from eeprom");
+  Schedule scheduleConfig;
+  EEPROM_readAnything(0, scheduleConfig);
+  if (scheduleConfig.on1 > 0 && scheduleCOnfig.on2 > 0)
+  {
+    doorSchedule = scheduleConfig;
+  }
+  
+  /*
+  //Serial.print("Initializing SD card...");
+  // On the Ethernet Shield, CS is pin 4. It's set as an output by default.
+  // Note that even if it's not used as the CS pin, the hardware SS pin 
+  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
+  // or the SD library functions will not work. 
+   pinMode(4, OUTPUT);
+   
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  
+  File myFile;
+  Serial.println("initialization done.");
+  if (!SD.exists(configFile))
+  {
+    Serial.println("Creating empty config file");
+    myFile = SD.open(configFile, FILE_WRITE);
+    myFile.close();
+  }
+  
+  Serial.println("Reading config");
+  String val = getConfigValue("on1");
+  long tmpTime = 0L;
+  if (val != "") {
+    tmpTime = stringToLong(val);
+    if (tmpTime > 0) {
+      OPEN_TIME_SECONDS = tmpTime;
+    }
+  }
+  
+  val = getConfigValue("on2");
+  tmpTime = 0L;
+  if (val != "") {
+    tmpTime = stringToLong(val);
+    if (tmpTime > 0) {
+      CLOSE_TIME_SECONDS = tmpTime;
+    }
+  }
+  */
 
 
   // start the Ethernet connection and the server:
@@ -240,13 +374,14 @@ void loop(){
   delay(100);
   // read the state of the pushbutton value:
   buttonState = digitalRead(pushPin);
-/*
+  Serial.println(buttonState);
+
   if (buttonState == LOW) {     
     // turn LED on:    
     digitalWrite(motorPin, HIGH);
     delay(TRIGGER_TIME_WINDOW_SEC*1000);
   }
-  */
+  
 
   long time = getDaySeconds();
 
@@ -259,12 +394,12 @@ void loop(){
   Serial.println(time);
   
   Serial.print("on1: ");
-  Serial.println(decodeTimeCode(OPEN_TIME_SECONDS));
+  Serial.println(decodeTimeCode(doorSchedule.on1));
   Serial.print("on2: ");
-  Serial.println(decodeTimeCode(CLOSE_TIME_SECONDS));
+  Serial.println(decodeTimeCode(doorSchedule.on2));
   
-  if ((time >= OPEN_TIME_SECONDS && time < OPEN_TIME_SECONDS + TRIGGER_TIME_WINDOW_SEC) ||
-        (time >= CLOSE_TIME_SECONDS && time < CLOSE_TIME_SECONDS + TRIGGER_TIME_WINDOW_SEC)
+  if ((time >= doorSchedule.on1 && time < doorSchedule.on1 + TRIGGER_TIME_WINDOW_SEC) ||
+        (time >= doorSchedule.on2 && time < doorSchedule.on2 + TRIGGER_TIME_WINDOW_SEC)
      )  
   {
     //open the door
